@@ -1,1 +1,8 @@
 __pycache__
+.vscode
+bazel-bin
+bazel-genfiles
+bazel-out
+bazel-src
+bazel-testlogs
+*.pyc

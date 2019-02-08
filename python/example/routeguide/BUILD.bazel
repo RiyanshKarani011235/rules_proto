@@ -40,3 +40,34 @@ py_binary(
         ":routeguide",
     ],
 )
+
+py_binary(
+    name = "server_without_bar",
+    srcs = [
+        "server.py",
+    ],
+    main = "server.py",
+    data = ["//example/proto:routeguide_features"],
+    imports = ["."],
+    deps = [
+        ":resources",
+        ":routeguide",
+	"//python/example/routeguide/foo",
+    ],
+)
+
+py_binary(
+    name = "server_with_bar",
+    srcs = [
+        "server.py",
+    ],
+    main = "server.py",
+    data = ["//example/proto:routeguide_features"],
+    imports = ["."],
+    deps = [
+        ":resources",
+        ":routeguide",
+	"//python/example/routeguide/foo",
+	"//python/example/routeguide/bar"
+    ],
+)

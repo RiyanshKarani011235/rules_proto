@@ -19,6 +19,8 @@ import math
 
 import grpc
 
+from python.example.routeguide.foo import foo
+
 # Recommend to the directory structure of client.runfiles to figure out the
 # correct import here.
 from routeguide_pb.example.proto import routeguide_pb2

@@ -1,0 +1,13 @@
+load("//python:python_grpc_library.bzl", "py_grpc_library")
+
+proto_library(
+	name = "bar_proto",
+	srcs = ["bar.proto"],
+
+)
+
+py_grpc_library(
+	name = "bar",
+	deps = [":bar_proto"],
+	visibility = ["//visibility:public"]
+)
