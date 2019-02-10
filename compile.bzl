@@ -200,7 +200,7 @@ def _get_proto_filename(src):
         return "/".join(parts[2:])
     return src.short_path
 
-def copy_proto(ctx, descriptor, src):
+def copy_proto(ctx, descriptor, src, language=None):
     """Copy a proto to the 'staging area'
 
     Args:
@@ -211,7 +211,13 @@ def copy_proto(ctx, descriptor, src):
     Returns:
       <Generated File> for the copied .proto
     """
-    proto = ctx.actions.declare_file(_get_proto_filename(src), sibling = descriptor)
+
+    proto = None
+    if language == 'python':
+        proto = ctx.actions.declare_file(src.basename, sibling = descriptor)
+    else:
+        proto = ctx.actions.declare_file(_get_proto_filename(src), sibling = descriptor)
+
     ctx.actions.run_shell(
         mnemonic = "CopyProto",
         inputs = [src],
@@ -277,6 +283,7 @@ def get_plugin_out_arg(ctx, outdir, plugin, plugin_outfiles):
     """
 
     arg = outdir
+
     if plugin.outdir:
         arg = plugin.outdir.replace("{name}", outdir)
     elif plugin.out:
@@ -356,11 +363,18 @@ def _get_plugin_outputs(ctx, descriptor, outputs, src, proto, plugin):
     Returns:
       <list<Generated File>> the augmented list of files that will be generated
     """
+    print(descriptor)
     for output in plugin.outputs:
         filename = _get_output_filename(src, plugin, output)
+        print('filename -> ' + filename)
         if not filename:
             continue
         sibling = _get_output_sibling_file(output, proto, descriptor)
+
+        # special case for python and python_grpc plugins
+        if plugin.name == 'python' or plugin.name == 'grpc_python':
+            sibling = None
+
         outputs.append(ctx.actions.declare_file(filename, sibling = sibling))
     return outputs
 
@@ -409,6 +423,8 @@ def proto_compile_impl(ctx):
     descriptor = ctx.outputs.descriptor
 
     # <string> The directory where that generated descriptor is.
+    # This will also serve as the staging area where the proto files will
+    # be copied before protoc is invoked.
     outdir = descriptor.dirname
 
     # <list<ProtoInfo>> A list of ProtoInfo
@@ -485,15 +501,20 @@ def proto_compile_impl(ctx):
     ###
 
     for dep in deps:
+        print(dep) # -> <unknown object com.google.devtools.build.lib.rules.proto.AutoValue_ProtoSourcesProvider>
         # Iterate all the directly specified .proto files.  If we have already
         # processed this one, skip it to avoid declaring duplicate outputs.
         # Create an action to copy the proto into our staging area.  Consult the
         # plugin to assemble the actual list of predicted generated artifacts
         # and save these in the 'outputs' list.
         for src in dep.direct_sources:
+            print(src) # -> <source file python/example/routeguide/bar/bar.proto>
             if targets.get(src.path):
                 continue
-            proto = copy_proto(ctx, descriptor, src)
+
+            proto = copy_proto(ctx, descriptor, src, language='python') # -> <generated file python/example/routeguide/bar/bar_pb/python/example/routeguide/bar/bar.proto>
+            print('after copy_proto')
+            print(proto)
             targets[src] = proto
             protos.append(proto)
 
@@ -509,6 +530,8 @@ def proto_compile_impl(ctx):
             protos.append(proto)
             if ctx.attr.transitive:
                 targets[src] = proto
+
+    # targets -> {<source file python/example/routeguide/bar/bar.proto>: <generated file python/example/routeguide/bar/bar_pb/python/example/routeguide/bar/bar.proto>}
 
     ###
     ### Part 3cb: apply transitivity rules
@@ -529,6 +552,9 @@ def proto_compile_impl(ctx):
         for plugin in plugins:
             outputs = _get_plugin_outputs(ctx, descriptor, outputs, src, proto, plugin)
 
+    print(outputs)
+    # outputs -> [<generated file python/example/routeguide/bar/bar_pb/python/example/routeguide/bar/bar_pb2.py>, <generated file python/example/routeguide/bar/bar_pb/python/example/routeguide/bar/bar_pb2_grpc.py>]
+
     ###
     ### Part 4: build list of arguments for protoc
     ###
@@ -546,7 +572,12 @@ def proto_compile_impl(ctx):
         args += ["--include_source_info"]
 
     for plugin in plugins:
-        args += [get_plugin_out_arg(ctx, outdir, plugin, plugin_outfiles)]
+        print('plugin name -> ' + plugin.name)
+        # special case for Python files
+        if plugin.name == 'python' or plugin.name == 'grpc_python':
+            args += ["--%s_out=%s" % (plugin.name, outputs[0].dirname)]
+        else:
+            args += [get_plugin_out_arg(ctx, outdir, plugin, plugin_outfiles)]
 
     args += ["--plugin=protoc-gen-%s=%s" % (k, v.path) for k, v in plugin_tools.items()]
 
@@ -557,6 +588,8 @@ def proto_compile_impl(ctx):
     ###
 
     mnemonic = "ProtoCompile"
+
+    print(args)
 
     command = " ".join([protoc.path] + args)
 
@@ -570,6 +603,8 @@ def proto_compile_impl(ctx):
         command = "env && " + command
         for f in outputs:
             print("expected output: %q", f.path)
+
+    print(command)
 
     ctx.actions.run_shell(
         mnemonic = mnemonic,

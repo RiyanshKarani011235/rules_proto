@@ -9,5 +9,6 @@ proto_library(
 py_grpc_library(
 	name = "bar",
 	deps = [":bar_proto"],
-	visibility = ["//visibility:public"]
+	visibility = ["//visibility:public"],
+	verbose = 5
 )
