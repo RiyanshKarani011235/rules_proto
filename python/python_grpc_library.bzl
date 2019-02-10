@@ -8,6 +8,10 @@ def python_grpc_library(**kwargs):
     verbose = kwargs.get("verbose")
     visibility = kwargs.get("visibility")
 
+
+    print('python_grpc_library')
+    print(name)
+
     name_pb = name + "_pb"
     python_grpc_compile(
         name = name_pb,

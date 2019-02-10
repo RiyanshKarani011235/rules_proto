@@ -200,7 +200,7 @@ def _get_proto_filename(src):
         return "/".join(parts[2:])
     return src.short_path
 
-def copy_proto(ctx, descriptor, src, language=None):
+def copy_proto(ctx, descriptor, src):
     """Copy a proto to the 'staging area'
 
     Args:
@@ -212,11 +212,12 @@ def copy_proto(ctx, descriptor, src, language=None):
       <Generated File> for the copied .proto
     """
 
-    proto = None
-    if language == 'python':
-        proto = ctx.actions.declare_file(src.basename, sibling = descriptor)
-    else:
-        proto = ctx.actions.declare_file(_get_proto_filename(src), sibling = descriptor)
+    # the proto files are copied to the same path in GENDIR as they 
+    # that of their source path
+    proto = ctx.actions.declare_file(src.path, sibling = descriptor)
+    # proto = src
+    print(proto)
+    # print(src.path)
 
     ctx.actions.run_shell(
         mnemonic = "CopyProto",
@@ -494,21 +495,26 @@ def proto_compile_impl(ctx):
             srcjar = _copy_jar_to_srcjar(ctx, out)
             srcjars.append(srcjar)
 
+    print('outputs')
+    print(outputs)
+
     ###
     ### Part 3a: Gather generated artifacts for each dependency .proto source file.
     ###
 
     for dep in deps:
+        print(dep) # -> <unknown object com.google.devtools.build.lib.rules.proto.AutoValue_ProtoSourcesProvider>
         # Iterate all the directly specified .proto files.  If we have already
         # processed this one, skip it to avoid declaring duplicate outputs.
         # Create an action to copy the proto into our staging area.  Consult the
         # plugin to assemble the actual list of predicted generated artifacts
         # and save these in the 'outputs' list.
         for src in dep.direct_sources:
+            print(src) # -> <source file python/example/routeguide/bar/bar.proto>
             if targets.get(src.path):
                 continue
 
-            proto = copy_proto(ctx, descriptor, src, language='python') # -> <generated file python/example/routeguide/bar/bar_pb/python/example/routeguide/bar/bar.proto>
+            proto = copy_proto(ctx, descriptor, src) # -> <generated file python/example/routeguide/bar/bar.proto>
             targets[src] = proto
             protos.append(proto)
 
@@ -516,6 +522,7 @@ def proto_compile_impl(ctx):
         # loop above, skip it. Otherwise add a copy action to get it into the
         # 'staging area'
         for src in dep.transitive_sources.to_list():
+            print(src)
             if targets.get(src):
                 continue
             if verbose > 2:
@@ -524,6 +531,10 @@ def proto_compile_impl(ctx):
             protos.append(proto)
             if ctx.attr.transitive:
                 targets[src] = proto
+
+    print('targets')
+    print(targets)
+    # targets -> {<source file python/example/routeguide/bar/bar.proto>: <generated file python/example/routeguide/bar/bar.proto>}
 
     ###
     ### Part 3cb: apply transitivity rules
@@ -544,6 +555,8 @@ def proto_compile_impl(ctx):
         for plugin in plugins:
             outputs = _get_plugin_outputs(ctx, descriptor, outputs, src, proto, plugin)
 
+    # outputs -> [<generated file python/example/routeguide/bar/bar_pb/python/example/routeguide/bar/bar_pb2.py>, <generated file python/example/routeguide/bar/bar_pb/python/example/routeguide/bar/bar_pb2_grpc.py>]
+
     ###
     ### Part 4: build list of arguments for protoc
     ###
@@ -552,6 +565,8 @@ def proto_compile_impl(ctx):
 
     # By default we have a single 'proto_path' argument at the 'staging area'
     # root.
+    # for output_file in outputs:
+    #     args += ["--proto_path=%s" % output_file.dirname]
     args += ["--proto_path=%s" % outdir]
 
     if ctx.attr.include_imports:
@@ -589,6 +604,8 @@ def proto_compile_impl(ctx):
         command = "env && " + command
         for f in outputs:
             print("expected output: %q", f.path)
+
+    print(command)
 
     ctx.actions.run_shell(
         mnemonic = mnemonic,

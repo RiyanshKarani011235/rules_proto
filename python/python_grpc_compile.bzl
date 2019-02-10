@@ -1,4 +1,4 @@
-load("//:compile.bzl", "proto_compile")
+load("//:python_compile.bzl", "proto_compile")
 
 def python_grpc_compile(**kwargs):
     proto_compile(
